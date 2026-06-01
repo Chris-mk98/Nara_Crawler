@@ -1,32 +1,137 @@
 # Nara_Crawler
 
-나라장터(G2B) 입찰공고 데이터를 수집하는 크롤러입니다.
+나라장터(G2B) 입찰공고 리스트를 수집하는 크롤러입니다.
 
-## 구조
+---
+
+## G2B 작동 구조
+
+나라장터(g2b.go.kr)는 SPA 구조로, 화면의 검색 결과는 내부 JSON API를 호출해 렌더링됩니다.  
+이 크롤러는 브라우저가 하는 것과 동일한 요청 흐름을 코드로 재현합니다.
+
+### 핵심 엔드포인트
+
+| 역할 | 메서드 | URL |
+|------|--------|-----|
+| 세션 발급 | POST | `/co/coz/coza/util/getSession.do` |
+| 공고 목록 조회 | POST | `/pn/pnp/pnpe/BidPbac/selectBidPbacScrollTypeList.do` |
+| **Excel 다운로드** | POST | `/pn/pnp/pnpe/BidPbac/selectBidPbacListExcel.do` |
+
+> Excel 다운로드 엔드포인트는 G2B 화면의 "Excel 다운로드" 버튼이 실제로 호출하는 URL과 동일합니다.  
+> 조건에 맞는 전체 결과를 한 번에 받아올 수 있어 페이지네이션 없이 완전한 데이터를 수집합니다.
+
+---
+
+## 세션 메커니즘
+
+G2B는 내부 API 호출 전에 반드시 세션이 있어야 합니다.  
+세션 없이 Excel 엔드포인트를 직접 호출하면 빈 응답 또는 오류를 반환합니다.
 
 ```
-Nara_Crawler/
-├── src/
-│   ├── web_crawler.py          # G2B 웹사이트 Excel 다운로드 (메인)
-│   └── selenium_crawler.py     # Selenium 브라우저 자동화 (대안)
-├── legacy/                     # 개발 과정 참고용 스크립트
-├── notebooks/                  # Jupyter 노트북 예제
-├── samples/                    # 샘플 데이터
-├── output/                     # 크롤링 결과물 (git 미포함)
-└── nara_excel_post.spec        # PyInstaller 빌드 설정
+[클라이언트]
+    │
+    ├─ POST /getSession.do  ──────────────────→  [G2B 서버]
+    │       ← 200 OK (쿠키 세션 발급)                │
+    │                                               │ 세션 유지
+    ├─ POST /selectBidPbacListExcel.do ──────────→  │
+    │       ← 200 OK (binary: .xlsx 파일)           │
+    │
+[파일 저장]
 ```
 
-## 크롤러 종류
+`requests.Session()`을 사용해 쿠키를 자동으로 유지하므로,  
+한 번 발급된 세션은 이후 요청에 자동으로 포함됩니다.
 
-### 1. 웹 크롤러 (`src/web_crawler.py`)
-G2B 웹사이트에 POST 요청으로 Excel을 직접 다운로드합니다.
-- 여러 키워드 일괄 검색
-- 결과 병합 및 중복 제거
-- `nara_keyword_date.xlsx` 파일에서 검색 조건 읽기
+---
 
-### 2. Selenium 크롤러 (`src/selenium_crawler.py`)
-브라우저 자동화로 G2B 검색 결과를 수집합니다.
-- 웹 크롤러로 수집 안 될 때 대안으로 사용
+## 요청 페이로드 구조
+
+Excel 다운로드 요청 시 `dlBidPbancLstM` 객체에 검색 조건을 담아 전송합니다.
+
+```json
+{
+  "dlBidPbancLstM": {
+    "bidPbancNm": "소프트웨어",       // 공고명 검색어 (핵심)
+    "fromBidDt": "20250501",          // 공고게시일 시작 (YYYYMMDD)
+    "toBidDt":   "20250531",          // 공고게시일 종료 (YYYYMMDD)
+    "bidDateType": "R",               // R = 공고게시일 기준
+    "pbancKndCd": "공440002",         // 공고종류: 용역
+    "prcmBsneSeCd": "0000 조070001 조070002 조070003 조070004 조070005 민079999",
+    "bsneAllYn": "Y",                 // 전체 사업 포함
+    "frcpYn": "Y",                    // 소기업 포함
+    "rsrvYn": "Y",                    // 예약구매 포함
+    "laseYn": "Y",                    // 리스 포함
+    "infoSysCd": "정010029",          // 시스템 식별 코드 (고정값)
+    "contxtSeCd": "콘010006",         // 컨텍스트 코드 (고정값)
+    "cangParmVal": "untySrch001",     // 통합검색 모드 (고정값)
+    "srchTy": "0"                     // 검색 타입 (고정값)
+  }
+}
+```
+
+> `infoSysCd`, `contxtSeCd`, `cangParmVal` 등 고정값은 G2B 프론트엔드가 항상 함께 전송하는 값으로,  
+> 브라우저 개발자도구 Network 탭에서 확인할 수 있습니다.
+
+---
+
+## 전체 실행 흐름 (web_crawler.py)
+
+```
+[nara_keyword_date.xlsx]
+    │  검색 기간 (C2: 시작일, C3: 종료일)
+    │  키워드 목록 (B6 이하)
+    ▼
+read_search_conditions()
+    │
+    ▼ 키워드별 반복
+┌─────────────────────────────────┐
+│  get_session()                  │
+│    └─ POST /getSession.do       │
+│                                 │
+│  download_excel_by_keyword()    │
+│    └─ POST /selectBidPbacListExcel.do │
+│    └─ 임시 파일 저장 (temp_*.xlsx)    │
+└─────────────────────────────────┘
+    │  키워드 수만큼 임시 파일 생성
+    ▼
+merge_excel_files()
+    ├─ 첫 번째 파일에서 원본 스타일(A1:H5) 보존
+    ├─ 전체 파일 데이터 병합
+    ├─ 입찰공고번호(D열) 기준 중복 제거
+    ├─ 테두리 및 열 너비 자동 조정
+    └─ 검색조건 메모 시트 추가
+    │
+    ▼
+나라장터_입찰공고_{시작일}_{종료일}_{저장시각}.xlsx
+```
+
+> 키워드마다 새 세션을 발급하는 이유:  
+> 하나의 세션으로 연속 요청 시 G2B 서버에서 세션을 만료시키는 경우가 있어 안정성을 위해 매번 재발급합니다.
+
+---
+
+## Selenium 크롤러 (`src/selenium_crawler.py`)
+
+웹 크롤러의 세션 방식이 동작하지 않을 때(G2B 서버 정책 변경 등) 대안으로 사용합니다.  
+실제 Chrome 브라우저를 띄워 사람처럼 검색 폼을 조작합니다.
+
+```
+Chrome 실행
+    └─ https://www.g2b.go.kr/ep/tbid/tbidList.do 접속
+         └─ 검색어, 날짜 입력
+              └─ 검색 버튼 클릭
+                   └─ 결과 테이블 HTML 파싱
+                        └─ JSON / Excel 저장
+```
+
+| 항목 | 웹 크롤러 | Selenium 크롤러 |
+|------|----------|----------------|
+| 속도 | 빠름 | 느림 (브라우저 렌더링) |
+| 안정성 | G2B 내부 API 변경에 취약 | 화면 구조 변경에 취약 |
+| 의존성 | requests | Chrome + ChromeDriver |
+| 출력 | Excel (원본 스타일 보존) | JSON / Excel |
+
+---
 
 ## 설치
 
@@ -34,17 +139,63 @@ G2B 웹사이트에 POST 요청으로 Excel을 직접 다운로드합니다.
 pip install -r requirements.txt
 ```
 
-Selenium 사용 시 ChromeDriver도 별도 설치 필요합니다.
+Selenium 사용 시 ChromeDriver 추가 설치 필요 ([chromedriver.chromium.org](https://chromedriver.chromium.org/downloads)).  
+설치된 Chrome 버전과 동일한 버전을 받아야 합니다.
+
+---
 
 ## 실행
 
-`nara_keyword_date.xlsx` 파일에 검색 키워드와 기간을 입력 후 실행:
+### 검색 조건 파일 준비
+
+`nara_keyword_date.xlsx`를 프로젝트 루트에 생성합니다.
+
+| 셀 | 내용 |
+|----|------|
+| C2 | 검색 시작일 (예: `20250501`) |
+| C3 | 검색 종료일 (예: `20250531`) |
+| B6~ | 키워드 목록 (한 행에 하나씩) |
+
+### 웹 크롤러 실행
+
 ```bash
 python src/web_crawler.py
 ```
 
+결과 파일은 실행 위치에 `나라장터_입찰공고_{시작일}_{종료일}_{저장시각}.xlsx`로 저장됩니다.
+
+### Selenium 크롤러 실행
+
+```bash
+python src/selenium_crawler.py
+```
+
+---
+
 ## 실행 파일 빌드 (Windows)
+
+비개발자 환경에서 Python 없이 실행할 수 있도록 단일 .exe로 패키징합니다.
 
 ```bash
 pyinstaller nara_excel_post.spec
+```
+
+빌드 결과물은 `dist/` 폴더에 생성됩니다.
+
+---
+
+## 프로젝트 구조
+
+```
+Nara_Crawler/
+├── src/
+│   ├── web_crawler.py          # G2B 세션 + Excel 다운로드 방식 (메인)
+│   └── selenium_crawler.py     # Selenium 브라우저 자동화 방식 (대안)
+├── legacy/                     # 개발 과정 참고용 스크립트
+│   ├── post_crawl_poc.py       # 내부 API 직접 호출 실험 코드
+│   └── session_example.py      # 단일 키워드 최소 동작 예제
+├── notebooks/                  # Jupyter 노트북
+├── samples/                    # 샘플 데이터
+├── output/                     # 크롤링 결과물 (git 미포함)
+└── nara_excel_post.spec        # PyInstaller 빌드 설정
 ```
