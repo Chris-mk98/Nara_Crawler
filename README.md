@@ -110,37 +110,11 @@ merge_excel_files()
 
 ---
 
-## Selenium 크롤러 (`src/selenium_crawler.py`)
-
-웹 크롤러의 세션 방식이 동작하지 않을 때(G2B 서버 정책 변경 등) 대안으로 사용합니다.  
-실제 Chrome 브라우저를 띄워 사람처럼 검색 폼을 조작합니다.
-
-```
-Chrome 실행
-    └─ https://www.g2b.go.kr/ep/tbid/tbidList.do 접속
-         └─ 검색어, 날짜 입력
-              └─ 검색 버튼 클릭
-                   └─ 결과 테이블 HTML 파싱
-                        └─ JSON / Excel 저장
-```
-
-| 항목 | 웹 크롤러 | Selenium 크롤러 |
-|------|----------|----------------|
-| 속도 | 빠름 | 느림 (브라우저 렌더링) |
-| 안정성 | G2B 내부 API 변경에 취약 | 화면 구조 변경에 취약 |
-| 의존성 | requests | Chrome + ChromeDriver |
-| 출력 | Excel (원본 스타일 보존) | JSON / Excel |
-
----
-
 ## 설치
 
 ```bash
 pip install -r requirements.txt
 ```
-
-Selenium 사용 시 ChromeDriver 추가 설치 필요 ([chromedriver.chromium.org](https://chromedriver.chromium.org/downloads)).  
-설치된 Chrome 버전과 동일한 버전을 받아야 합니다.
 
 ---
 
@@ -156,19 +130,13 @@ Selenium 사용 시 ChromeDriver 추가 설치 필요 ([chromedriver.chromium.or
 | C3 | 검색 종료일 (예: `20250531`) |
 | B6~ | 키워드 목록 (한 행에 하나씩) |
 
-### 웹 크롤러 실행
+### 실행
 
 ```bash
 python src/web_crawler.py
 ```
 
 결과 파일은 실행 위치에 `나라장터_입찰공고_{시작일}_{종료일}_{저장시각}.xlsx`로 저장됩니다.
-
-### Selenium 크롤러 실행
-
-```bash
-python src/selenium_crawler.py
-```
 
 ---
 
@@ -189,8 +157,7 @@ pyinstaller nara_excel_post.spec
 ```
 Nara_Crawler/
 ├── src/
-│   ├── web_crawler.py          # G2B 세션 + Excel 다운로드 방식 (메인)
-│   └── selenium_crawler.py     # Selenium 브라우저 자동화 방식 (대안)
+│   └── web_crawler.py          # G2B 세션 + Excel 다운로드
 ├── legacy/                     # 개발 과정 참고용 스크립트
 │   ├── post_crawl_poc.py       # 내부 API 직접 호출 실험 코드
 │   └── session_example.py      # 단일 키워드 최소 동작 예제
