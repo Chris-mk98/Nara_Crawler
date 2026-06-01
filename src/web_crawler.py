@@ -29,10 +29,10 @@ def get_session():
         print("❌ 세션 발급 실패:", session_response.status_code)
         return None
 
-def download_excel_by_keyword(session, keyword, from_date, to_date):
+def download_excel_by_keyword(session, keyword, from_date, to_date, work_dir="."):
     """키워드별 엑셀 다운로드 함수"""
     print(f"⏳ '{keyword}' 키워드로 검색 중...")
-    
+
     base_url = "https://www.g2b.go.kr"
     excel_url = f"{base_url}/pn/pnp/pnpe/BidPbac/selectBidPbacListExcel.do"
     
@@ -104,7 +104,7 @@ def download_excel_by_keyword(session, keyword, from_date, to_date):
     response = session.post(excel_url, headers=excel_headers, json=payload)
     
     if response.status_code == 200:
-        temp_filename = f"temp_{keyword.replace(' ', '_')}.xlsx"
+        temp_filename = os.path.join(work_dir, f"temp_{keyword.replace(' ', '_')}.xlsx")
         with open(temp_filename, "wb") as f:
             f.write(response.content)
         print(f"✅ '{keyword}' 검색 완료")
@@ -142,7 +142,7 @@ def read_search_conditions():
         print(f"❌ 검색 조건 파일 읽기 실패: {e}")
         return None, None, None
 
-def merge_excel_files(excel_files, from_date, to_date, keywords):
+def merge_excel_files(excel_files, from_date, to_date, keywords, work_dir="."):
     """엑셀 파일들을 병합하고 중복 제거"""
     print("⏳ 엑셀 파일 병합 및 중복 제거 중...")
     
@@ -200,7 +200,7 @@ def merge_excel_files(excel_files, from_date, to_date, keywords):
     
     # 최종 엑셀 파일 생성
     save_time = datetime.now().strftime("%Y%m%d%H%M%S")
-    filename = f"나라장터_입찰공고_{from_date}_{to_date}_{save_time}.xlsx"
+    filename = os.path.join(work_dir, f"나라장터_입찰공고_{from_date}_{to_date}_{save_time}.xlsx")
     
     # 새 워크북 생성
     new_wb = Workbook()
@@ -329,6 +329,22 @@ def main():
         print(f"🎉 모든 작업 완료! 결과 파일: {final_file}")
     else:
         print("❌ 작업 실패")
+
+def run_crawler(keywords, from_date, to_date, work_dir="."):
+    """웹 서비스용 크롤러 실행 함수 (work_dir 내에 결과 파일 저장)."""
+    excel_files = []
+    for keyword in keywords:
+        session = get_session()
+        if session is None:
+            continue
+        excel_file = download_excel_by_keyword(session, keyword, from_date, to_date, work_dir)
+        excel_files.append(excel_file)
+
+    if not any(f for f in excel_files if f is not None):
+        return None
+
+    return merge_excel_files(excel_files, from_date, to_date, keywords, work_dir)
+
 
 if __name__ == "__main__":
     main()

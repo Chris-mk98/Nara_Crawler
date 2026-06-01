@@ -1,3 +1,15 @@
+# 기존 크롤러
 requests
 pandas
 openpyxl
+
+# 웹 서비스
+fastapi
+uvicorn[standard]
+# PyJWT 불필요: 내장 hmac/hashlib으로 토큰 구현
+bcrypt
+apscheduler
+python-dotenv
+jinja2
+aiofiles
+python-multipart

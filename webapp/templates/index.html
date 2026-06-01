@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>나라장터 자동 수집 서비스</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    [x-cloak] { display: none; }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid #fff;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen font-sans">
+
+<!-- ────────── 로그인 / 회원가입 ────────── -->
+<div id="auth-view" class="flex items-center justify-center min-h-screen px-4">
+  <div class="bg-white rounded-2xl shadow-lg w-full max-w-md p-8">
+    <h1 class="text-2xl font-bold text-center text-blue-700 mb-1">나라장터</h1>
+    <p class="text-center text-slate-500 text-sm mb-6">입찰공고 자동 수집 서비스</p>
+
+    <!-- 탭 -->
+    <div class="flex mb-6 bg-slate-100 rounded-lg p-1">
+      <button id="tab-login" onclick="switchTab('login')"
+        class="flex-1 py-2 rounded-md text-sm font-medium transition-all bg-white shadow text-blue-700">
+        로그인
+      </button>
+      <button id="tab-register" onclick="switchTab('register')"
+        class="flex-1 py-2 rounded-md text-sm font-medium transition-all text-slate-500">
+        회원가입
+      </button>
+    </div>
+
+    <form id="auth-form" onsubmit="submitAuth(event)" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">이메일</label>
+        <input id="auth-email" type="email" required placeholder="example@email.com"
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">비밀번호</label>
+        <input id="auth-password" type="password" required placeholder="6자 이상"
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+      </div>
+      <div id="auth-error" class="text-red-500 text-sm hidden"></div>
+      <button type="submit" id="auth-btn"
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-colors text-sm">
+        로그인
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ────────── 대시보드 ────────── -->
+<div id="dashboard-view" class="hidden min-h-screen">
+
+  <!-- 헤더 -->
+  <header class="bg-white shadow-sm sticky top-0 z-10">
+    <div class="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-blue-700 font-bold text-lg">나라장터</span>
+        <span class="text-slate-400 text-sm">자동 수집 서비스</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="header-email" class="text-slate-500 text-sm hidden sm:block"></span>
+        <button onclick="logout()"
+          class="text-sm text-slate-600 hover:text-red-500 border border-slate-200 px-3 py-1 rounded-lg transition-colors">
+          로그아웃
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-4 py-6 space-y-6">
+
+    <!-- ── 설정 카드 ── -->
+    <section class="bg-white rounded-2xl shadow-sm p-6">
+      <h2 class="text-base font-semibold text-slate-800 mb-5">⚙️ 수집 설정</h2>
+
+      <!-- 수신 이메일 -->
+      <div class="mb-5">
+        <label class="block text-sm font-medium text-slate-700 mb-1">수신 이메일</label>
+        <input id="cfg-email" type="email" placeholder="결과를 받을 이메일 주소"
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        <p class="text-xs text-slate-400 mt-1">비워두면 가입 이메일로 발송됩니다.</p>
+      </div>
+
+      <!-- 키워드 -->
+      <div class="mb-5">
+        <label class="block text-sm font-medium text-slate-700 mb-1">검색 키워드</label>
+        <div id="keyword-box"
+          class="flex flex-wrap gap-1 border border-slate-300 rounded-lg p-2 min-h-[42px] cursor-text focus-within:ring-2 focus-within:ring-blue-400"
+          onclick="document.getElementById('kw-input').focus()">
+          <!-- 태그들이 여기 삽입됨 -->
+          <input id="kw-input" type="text" placeholder="키워드 입력 후 Enter"
+            class="outline-none flex-1 min-w-[140px] text-sm bg-transparent"
+            onkeydown="handleKwInput(event)" />
+        </div>
+        <p class="text-xs text-slate-400 mt-1">Enter 또는 쉼표(,)로 키워드를 추가하세요.</p>
+      </div>
+
+      <!-- 검색 기간 -->
+      <div class="mb-5">
+        <label class="block text-sm font-medium text-slate-700 mb-2">검색 기간</label>
+        <div class="flex flex-wrap gap-4">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="date-type" value="relative" checked onchange="toggleDateType()" class="accent-blue-600" />
+            <span class="text-sm">최근</span>
+            <input id="relative-days" type="number" min="1" max="365" value="7"
+              class="w-16 border border-slate-300 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-sm">일</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="date-type" value="custom" onchange="toggleDateType()" class="accent-blue-600" />
+            <span class="text-sm">직접 입력</span>
+          </label>
+        </div>
+        <div id="custom-dates" class="mt-3 hidden flex-wrap gap-3 items-center">
+          <div class="flex items-center gap-2">
+            <label class="text-sm text-slate-600">시작일</label>
+            <input id="start-date" type="date"
+              class="border border-slate-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-sm text-slate-600">종료일</label>
+            <input id="end-date" type="date"
+              class="border border-slate-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 자동 실행 스케줄 -->
+      <div class="mb-5">
+        <label class="block text-sm font-medium text-slate-700 mb-2">자동 실행 스케줄</label>
+        <div class="flex flex-wrap gap-4 mb-3">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="sched-type" value="disabled" checked onchange="toggleSchedule()" class="accent-blue-600" />
+            <span class="text-sm">비활성</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="sched-type" value="daily" onchange="toggleSchedule()" class="accent-blue-600" />
+            <span class="text-sm">매일</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="sched-type" value="weekly" onchange="toggleSchedule()" class="accent-blue-600" />
+            <span class="text-sm">매주</span>
+          </label>
+        </div>
+
+        <div id="sched-time-row" class="hidden flex flex-wrap gap-3 items-center">
+          <div id="sched-dow-wrap" class="hidden">
+            <select id="sched-dow"
+              class="border border-slate-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+              <option value="0">월요일</option>
+              <option value="1">화요일</option>
+              <option value="2">수요일</option>
+              <option value="3">목요일</option>
+              <option value="4">금요일</option>
+              <option value="5">토요일</option>
+              <option value="6">일요일</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-sm text-slate-600">실행 시각</label>
+            <input id="sched-hour" type="number" min="0" max="23" value="9"
+              class="w-14 border border-slate-300 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-slate-500">시</span>
+            <input id="sched-min" type="number" min="0" max="59" value="0"
+              class="w-14 border border-slate-300 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+            <span class="text-slate-500">분</span>
+          </div>
+        </div>
+
+        <!-- 활성화 토글 -->
+        <div id="active-toggle-row" class="hidden mt-3 flex items-center gap-3">
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="is-active" class="sr-only peer" />
+            <div class="w-10 h-5 bg-slate-200 peer-checked:bg-blue-600 rounded-full transition-colors
+                        after:content-[''] after:absolute after:top-0.5 after:left-0.5
+                        after:bg-white after:rounded-full after:h-4 after:w-4
+                        after:transition-all peer-checked:after:translate-x-5"></div>
+          </label>
+          <span class="text-sm text-slate-700">스케줄 활성화</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button onclick="saveConfig()"
+          class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors">
+          설정 저장
+        </button>
+        <span id="save-status" class="text-sm text-green-600 hidden">✅ 저장되었습니다</span>
+      </div>
+    </section>
+
+    <!-- ── 즉시 실행 카드 ── -->
+    <section class="bg-white rounded-2xl shadow-sm p-6">
+      <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h2 class="text-base font-semibold text-slate-800">▶️ 즉시 실행</h2>
+          <p class="text-sm text-slate-500 mt-0.5">현재 설정으로 즉시 수집 후 이메일로 전송합니다.</p>
+        </div>
+        <button id="run-btn" onclick="runNow()"
+          class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-6 py-2 rounded-lg transition-colors flex items-center gap-2">
+          지금 실행
+        </button>
+      </div>
+      <div id="run-status" class="mt-3 hidden text-sm px-3 py-2 rounded-lg"></div>
+    </section>
+
+    <!-- ── 실행 이력 ── -->
+    <section class="bg-white rounded-2xl shadow-sm p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-base font-semibold text-slate-800">📋 실행 이력</h2>
+        <button onclick="loadHistory()" class="text-xs text-blue-600 hover:underline">새로고침</button>
+      </div>
+      <div id="history-container">
+        <p class="text-sm text-slate-400 text-center py-4">이력을 불러오는 중...</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  상태
+// ═══════════════════════════════════════════════════
+let token = localStorage.getItem('nara_token');
+let userEmail = localStorage.getItem('nara_email');
+let keywords = [];
+let authTab = 'login';
+
+// ═══════════════════════════════════════════════════
+//  초기화
+// ═══════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  if (token) {
+    showDashboard();
+  } else {
+    showAuth();
+  }
+});
+
+function showAuth() {
+  document.getElementById('auth-view').classList.remove('hidden');
+  document.getElementById('dashboard-view').classList.add('hidden');
+}
+
+function showDashboard() {
+  document.getElementById('auth-view').classList.add('hidden');
+  document.getElementById('dashboard-view').classList.remove('hidden');
+  document.getElementById('header-email').textContent = userEmail || '';
+  loadConfig();
+  loadHistory();
+}
+
+// ═══════════════════════════════════════════════════
+//  인증
+// ═══════════════════════════════════════════════════
+function switchTab(tab) {
+  authTab = tab;
+  const btnLogin = document.getElementById('tab-login');
+  const btnReg = document.getElementById('tab-register');
+  const authBtn = document.getElementById('auth-btn');
+
+  if (tab === 'login') {
+    btnLogin.className = 'flex-1 py-2 rounded-md text-sm font-medium transition-all bg-white shadow text-blue-700';
+    btnReg.className = 'flex-1 py-2 rounded-md text-sm font-medium transition-all text-slate-500';
+    authBtn.textContent = '로그인';
+  } else {
+    btnReg.className = 'flex-1 py-2 rounded-md text-sm font-medium transition-all bg-white shadow text-blue-700';
+    btnLogin.className = 'flex-1 py-2 rounded-md text-sm font-medium transition-all text-slate-500';
+    authBtn.textContent = '회원가입';
+  }
+  clearAuthError();
+}
+
+async function submitAuth(e) {
+  e.preventDefault();
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const endpoint = authTab === 'login' ? '/api/auth/login' : '/api/auth/register';
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showAuthError(data.detail || '오류가 발생했습니다'); return; }
+
+    token = data.token;
+    userEmail = data.email;
+    localStorage.setItem('nara_token', token);
+    localStorage.setItem('nara_email', userEmail);
+    showDashboard();
+  } catch {
+    showAuthError('서버에 연결할 수 없습니다');
+  }
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+function clearAuthError() {
+  document.getElementById('auth-error').classList.add('hidden');
+}
+
+function logout() {
+  token = null; userEmail = null;
+  localStorage.removeItem('nara_token');
+  localStorage.removeItem('nara_email');
+  showAuth();
+}
+
+// ═══════════════════════════════════════════════════
+//  API 공통
+// ═══════════════════════════════════════════════════
+async function api(method, path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch('/api' + path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) { logout(); return null; }
+  return res;
+}
+
+// ═══════════════════════════════════════════════════
+//  키워드 태그 입력
+// ═══════════════════════════════════════════════════
+function handleKwInput(e) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = e.target.value.replace(/,/g, '').trim();
+    addKeyword(val);
+    e.target.value = '';
+  }
+  if (e.key === 'Backspace' && e.target.value === '' && keywords.length > 0) {
+    removeKeyword(keywords.length - 1);
+  }
+}
+
+function addKeyword(val) {
+  if (!val || keywords.includes(val)) return;
+  keywords.push(val);
+  renderKeywords();
+}
+
+function removeKeyword(idx) {
+  keywords.splice(idx, 1);
+  renderKeywords();
+}
+
+function renderKeywords() {
+  const box = document.getElementById('keyword-box');
+  const input = document.getElementById('kw-input');
+  box.querySelectorAll('.kw-tag').forEach(el => el.remove());
+
+  keywords.forEach((kw, i) => {
+    const tag = document.createElement('span');
+    tag.className = 'kw-tag inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800';
+    tag.innerHTML = `${escHtml(kw)}<button type="button" onclick="removeKeyword(${i})" class="text-blue-500 hover:text-blue-900 font-bold ml-0.5">×</button>`;
+    box.insertBefore(tag, input);
+  });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ═══════════════════════════════════════════════════
+//  날짜 타입 토글
+// ═══════════════════════════════════════════════════
+function toggleDateType() {
+  const val = document.querySelector('input[name="date-type"]:checked').value;
+  const el = document.getElementById('custom-dates');
+  if (val === 'custom') {
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+  } else {
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  스케줄 토글
+// ═══════════════════════════════════════════════════
+function toggleSchedule() {
+  const val = document.querySelector('input[name="sched-type"]:checked').value;
+  const timeRow = document.getElementById('sched-time-row');
+  const dowWrap = document.getElementById('sched-dow-wrap');
+  const activeRow = document.getElementById('active-toggle-row');
+
+  if (val === 'disabled') {
+    timeRow.classList.add('hidden');
+    activeRow.classList.add('hidden');
+  } else {
+    timeRow.classList.remove('hidden');
+    timeRow.classList.add('flex');
+    activeRow.classList.remove('hidden');
+  }
+
+  if (val === 'weekly') {
+    dowWrap.classList.remove('hidden');
+  } else {
+    dowWrap.classList.add('hidden');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  설정 로드
+// ═══════════════════════════════════════════════════
+async function loadConfig() {
+  const res = await api('GET', '/config');
+  if (!res) return;
+  const cfg = await res.json();
+  if (!cfg.id) return;
+
+  // 이메일
+  document.getElementById('cfg-email').value = cfg.recipient_email || '';
+
+  // 키워드
+  keywords = cfg.keywords || [];
+  renderKeywords();
+
+  // 기간
+  if (cfg.date_range_type === 'custom') {
+    document.querySelector('input[name="date-type"][value="custom"]').checked = true;
+    document.getElementById('start-date').value = fmtDate(cfg.custom_start_date);
+    document.getElementById('end-date').value = fmtDate(cfg.custom_end_date);
+  } else {
+    document.querySelector('input[name="date-type"][value="relative"]').checked = true;
+    document.getElementById('relative-days').value = cfg.relative_days || 7;
+  }
+  toggleDateType();
+
+  // 스케줄
+  const st = cfg.schedule_type || 'disabled';
+  document.querySelector(`input[name="sched-type"][value="${st}"]`).checked = true;
+  document.getElementById('sched-hour').value = cfg.schedule_hour ?? 9;
+  document.getElementById('sched-min').value = cfg.schedule_minute ?? 0;
+  if (cfg.schedule_day_of_week != null) {
+    document.getElementById('sched-dow').value = cfg.schedule_day_of_week;
+  }
+  document.getElementById('is-active').checked = !!cfg.is_active;
+  toggleSchedule();
+}
+
+function fmtDate(yyyymmdd) {
+  if (!yyyymmdd || yyyymmdd.length !== 8) return '';
+  return `${yyyymmdd.slice(0,4)}-${yyyymmdd.slice(4,6)}-${yyyymmdd.slice(6,8)}`;
+}
+
+function parseDateInput(val) {
+  return val ? val.replace(/-/g, '') : null;
+}
+
+// ═══════════════════════════════════════════════════
+//  설정 저장
+// ═══════════════════════════════════════════════════
+async function saveConfig() {
+  const dateType = document.querySelector('input[name="date-type"]:checked').value;
+  const schedType = document.querySelector('input[name="sched-type"]:checked').value;
+
+  const body = {
+    recipient_email: document.getElementById('cfg-email').value.trim() || null,
+    keywords,
+    date_range_type: dateType,
+    relative_days: parseInt(document.getElementById('relative-days').value) || 7,
+    custom_start_date: parseDateInput(document.getElementById('start-date').value),
+    custom_end_date: parseDateInput(document.getElementById('end-date').value),
+    schedule_type: schedType,
+    schedule_hour: parseInt(document.getElementById('sched-hour').value) || 9,
+    schedule_minute: parseInt(document.getElementById('sched-min').value) || 0,
+    schedule_day_of_week: schedType === 'weekly'
+      ? parseInt(document.getElementById('sched-dow').value) : null,
+    is_active: document.getElementById('is-active').checked,
+  };
+
+  const res = await api('PUT', '/config', body);
+  if (!res) return;
+  if (res.ok) {
+    const el = document.getElementById('save-status');
+    el.classList.remove('hidden');
+    setTimeout(() => el.classList.add('hidden'), 3000);
+  } else {
+    const data = await res.json();
+    alert(data.detail || '저장 실패');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  즉시 실행
+// ═══════════════════════════════════════════════════
+async function runNow() {
+  const btn = document.getElementById('run-btn');
+  const statusEl = document.getElementById('run-status');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 실행 중...';
+  statusEl.className = 'mt-3 text-sm px-3 py-2 rounded-lg bg-blue-50 text-blue-700';
+  statusEl.textContent = '⏳ 크롤링을 시작했습니다. 완료 후 이메일로 전송됩니다.';
+  statusEl.classList.remove('hidden');
+
+  try {
+    const res = await api('POST', '/jobs/run', {});
+    if (!res) return;
+    const data = await res.json();
+
+    if (res.ok) {
+      statusEl.className = 'mt-3 text-sm px-3 py-2 rounded-lg bg-green-50 text-green-700';
+      statusEl.textContent = `✅ ${data.message} (작업 ID: ${data.job_id})`;
+      setTimeout(() => loadHistory(), 2000);
+    } else {
+      statusEl.className = 'mt-3 text-sm px-3 py-2 rounded-lg bg-red-50 text-red-700';
+      statusEl.textContent = `❌ ${data.detail || '실행 실패'}`;
+    }
+  } catch {
+    statusEl.className = 'mt-3 text-sm px-3 py-2 rounded-lg bg-red-50 text-red-700';
+    statusEl.textContent = '❌ 서버 오류';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '지금 실행';
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  실행 이력
+// ═══════════════════════════════════════════════════
+async function loadHistory() {
+  const container = document.getElementById('history-container');
+
+  const res = await api('GET', '/jobs/history');
+  if (!res) return;
+  const history = await res.json();
+
+  if (!history.length) {
+    container.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">실행 이력이 없습니다</p>';
+    return;
+  }
+
+  const rows = history.map(job => {
+    const statusBadge = statusBadgeHtml(job.status);
+    const kws = job.keywords ? JSON.parse(job.keywords).join(', ') : '-';
+    const period = job.from_date && job.to_date
+      ? `${fmtDate(job.from_date)} ~ ${fmtDate(job.to_date)}` : '-';
+    const rows = job.row_count != null ? `${job.row_count}건` : '-';
+    const started = job.started_at ? job.started_at.slice(0, 16) : '-';
+    const dlBtn = job.status === 'success' && job.excel_filename
+      ? `<a href="/api/jobs/${job.id}/download" target="_blank"
+            class="text-xs text-blue-600 hover:underline font-medium">다운로드</a>`
+      : '<span class="text-xs text-slate-300">-</span>';
+
+    return `
+      <tr class="border-b border-slate-100 hover:bg-slate-50">
+        <td class="py-3 px-4 text-sm text-slate-600">${started}</td>
+        <td class="py-3 px-4 text-sm text-slate-600">${period}</td>
+        <td class="py-3 px-4 text-sm text-slate-500 max-w-xs truncate" title="${escHtml(kws)}">${escHtml(kws)}</td>
+        <td class="py-3 px-4 text-sm text-slate-600 text-right">${rows}</td>
+        <td class="py-3 px-4">${statusBadge}</td>
+        <td class="py-3 px-4">${dlBtn}</td>
+      </tr>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="overflow-x-auto">
+      <table class="w-full text-left">
+        <thead>
+          <tr class="border-b border-slate-200">
+            <th class="py-2 px-4 text-xs font-semibold text-slate-500">실행 시각</th>
+            <th class="py-2 px-4 text-xs font-semibold text-slate-500">검색 기간</th>
+            <th class="py-2 px-4 text-xs font-semibold text-slate-500">키워드</th>
+            <th class="py-2 px-4 text-xs font-semibold text-slate-500 text-right">건수</th>
+            <th class="py-2 px-4 text-xs font-semibold text-slate-500">상태</th>
+            <th class="py-2 px-4 text-xs font-semibold text-slate-500">파일</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function statusBadgeHtml(status) {
+  const map = {
+    running: 'bg-yellow-100 text-yellow-800',
+    success: 'bg-green-100 text-green-800',
+    failed:  'bg-red-100 text-red-700',
+  };
+  const labels = { running: '실행 중', success: '완료', failed: '실패' };
+  const cls = map[status] || 'bg-slate-100 text-slate-600';
+  return `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium ${cls}">${labels[status] || status}</span>`;
+}
+
+// 이력 자동 새로고침 (30초)
+setInterval(() => {
+  if (!document.getElementById('dashboard-view').classList.contains('hidden')) {
+    loadHistory();
+  }
+}, 30000);
+</script>
+</body>
+</html>

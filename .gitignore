@@ -34,3 +34,8 @@ Thumbs.db
 .env
 config.json
 api_key.txt
+
+# 웹 서비스 생성 파일
+webapp/nara_crawler.db
+webapp/outputs/
+!webapp/outputs/.gitkeep
