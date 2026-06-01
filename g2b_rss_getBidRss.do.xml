@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ìì¤í ì ê·¼ ìë´</title>
+    <link rel="stylesheet" href="/static/info/css/common.css">
+
+</head>
+<body class="wrapper error_404">
+    <div class="conArea">
+        <h1>ëë¼ì¥í° êµ­ê°ì¢í©ì ìì¡°ë¬</h1>
+        <div class="conText">
+             <div>
+                 <p class="con_tit">ìì²­íì  íì´ì§ë¥¼ ì°¾ìì ììµëë¤.</p>
+                 <p><span class="red">ì¬ë°ë¥´ì§ ìì URL ì ê·¼ì¼ ì ììµëë¤.</span></br> ë¤ì íë² íì¸ í ì´ì©í´ ì£¼ìê¸° ë°ëëë¤.</p>
+                 <p><a href="/"><span class="fs24">ëë¼ì¥í° ë°ë¡ê°ê¸°</span></span></a></p>
+                 <p class="reference">ëë¼ì¥í° ì´ì©ê´ë ¨ ë¬¸ì : <span> 1588 - 0800</span></p>
+             </div>
+        </div>
+    </div>
+</body>
+</html>
